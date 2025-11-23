@@ -119,6 +119,17 @@ export const GET_ORDER = gql`
   }
 `;
 
+// Payment Mutations
+export const GET_PAYMENT_TOKEN = gql`
+  mutation GetPaymentToken($input: PaymentTokenInput!) {
+    getPaymentToken(input: $input) {
+      token
+      success
+      message
+    }
+  }
+`;
+
 // Delivery Queries
 export const GET_DELIVERY_PRICING = gql`
   query GetDeliveryPricing($input: DeliveryPricingInput!) {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useLazyQuery } from '@apollo/client';
-import { CREATE_ORDER, GET_DELIVERY_PRICING } from '../graphql/queries';
+import { CREATE_ORDER, GET_DELIVERY_PRICING, GET_PAYMENT_TOKEN } from '../graphql/queries';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
@@ -27,7 +27,27 @@ const CheckoutPage: React.FC = () => {
 
   const [deliveryPrice, setDeliveryPrice] = useState<number>(0);
   const [shippingCalculated, setShippingCalculated] = useState<boolean>(false);
-  const [paymentToken] = useState('mock_payment_token_' + Date.now());
+  const [cardNumber, setCardNumber] = useState<string>('');
+  const [paymentToken, setPaymentToken] = useState<string>('');
+  const [paymentError, setPaymentError] = useState<string>('');
+
+  const [getPaymentToken, { loading: paymentLoading }] = useMutation<{ getPaymentToken: { token: string; success: boolean; message: string } }>(
+    GET_PAYMENT_TOKEN,
+    {
+      onCompleted: (data) => {
+        if (data.getPaymentToken.success) {
+          setPaymentToken(data.getPaymentToken.token);
+          setPaymentError('');
+        } else {
+          setPaymentError(data.getPaymentToken.message);
+        }
+      },
+      onError: (error) => {
+        console.error('Payment token error:', error);
+        setPaymentError(`Failed to get payment token: ${error.message}`);
+      },
+    }
+  );
 
   const [getDeliveryPricing, { loading: pricingLoading }] = useLazyQuery<{ getDeliveryPricing: DeliveryPricingResponse }>(
     GET_DELIVERY_PRICING,
@@ -67,6 +87,44 @@ const CheckoutPage: React.FC = () => {
 
   const handleAddressChange = (field: keyof Address, value: string) => {
     setAddress((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleGetPaymentToken = async () => {
+    console.log('handleGetPaymentToken called');
+    console.log('cardNumber:', cardNumber);
+    console.log('deliveryPrice:', deliveryPrice);
+    
+    if (!cardNumber || cardNumber.trim() === '') {
+      alert('Please enter a card number');
+      return;
+    }
+
+    const totalAmount = getTotalPrice() + deliveryPrice;
+    console.log('totalAmount:', totalAmount);
+    console.log('Calling getPaymentToken mutation...');
+
+    try {
+      const result = await getPaymentToken({
+        variables: {
+          input: {
+            cardNumber: cardNumber.trim(),
+            amount: totalAmount,
+          },
+        },
+      });
+      console.log('Payment token result:', result);
+      console.log('Payment token data:', result?.data);
+      console.log('Payment token errors:', result?.errors);
+      
+      if (result?.data?.getPaymentToken) {
+        console.log('Token received:', result.data.getPaymentToken);
+      } else {
+        console.warn('No token in response!');
+      }
+    } catch (error) {
+      console.error('Payment token error caught:', error);
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleCalculateShipping = async () => {
@@ -118,6 +176,11 @@ const CheckoutPage: React.FC = () => {
 
     if (!address.phoneNumber || address.phoneNumber.trim() === '') {
       alert('Please enter a phone number');
+      return;
+    }
+
+    if (!paymentToken || paymentToken.trim() === '') {
+      alert('Please get payment token first');
       return;
     }
 
@@ -292,13 +355,51 @@ const CheckoutPage: React.FC = () => {
           {/* Payment Information */}
           <Card className="p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Information</h2>
-            <p className="text-gray-600 text-sm mb-4">
-              Payment processing is simulated for this demo. In production, integrate with Stripe, PayPal, or other payment providers.
-            </p>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Mock Payment Token:</strong> {paymentToken}
-              </p>
+            
+            <div className="space-y-4">
+              <Input
+                label="Card Number"
+                value={cardNumber}
+                onChange={(e) => setCardNumber(e.target.value)}
+                placeholder="1234 5678 9012 3456"
+                type="text"
+                maxLength={16}
+                required
+              />
+
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={handleGetPaymentToken}
+                isLoading={paymentLoading}
+                disabled={!cardNumber || deliveryPrice === 0}
+              >
+                Verify Payment Card
+              </Button>
+
+              {paymentToken && (
+                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <p className="text-green-800 font-medium">
+                      Payment card verified successfully!
+                    </p>
+                  </div>
+                  <p className="text-green-700 text-xs mt-2">
+                    You can now place your order
+                  </p>
+                </div>
+              )}
+
+              {paymentError && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 text-sm">
+                    <strong>Error:</strong> {paymentError}
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -344,7 +445,7 @@ const CheckoutPage: React.FC = () => {
               fullWidth
               onClick={handleSubmitOrder}
               isLoading={orderLoading}
-              disabled={deliveryPrice === 0}
+              disabled={deliveryPrice === 0 || !paymentToken}
             >
               Place Order
             </Button>
