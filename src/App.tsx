@@ -17,6 +17,7 @@ import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import WarehousePage from './pages/WarehousePage';
 import DeliveryPage from './pages/DeliveryPage';
+import AdminProductsPage from './pages/AdminProductsPage';
 import CallbackPage from './pages/CallbackPage';
 
 const App: React.FC = () => {
@@ -55,6 +56,14 @@ const App: React.FC = () => {
                         element={
                           <ProtectedRoute requiredGroups={['admin', 'delivery']}>
                             <DeliveryPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/admin/products" 
+                        element={
+                          <ProtectedRoute requiredGroups={['admin']}>
+                            <AdminProductsPage />
                           </ProtectedRoute>
                         } 
                       />

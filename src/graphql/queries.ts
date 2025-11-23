@@ -298,3 +298,31 @@ export const COMPLETE_PACKAGING = gql`
     }
   }
 `;
+
+// Admin Product Queries and Mutations
+export const GET_PRESIGNED_URL = gql`
+  query GetPresignedUrl($filename: String!, $contentType: String!) {
+    getPresignedUrl(filename: $filename, contentType: $contentType) {
+      uploadUrl
+      imageUrl
+      key
+    }
+  }
+`;
+
+export const CREATE_PRODUCT = gql`
+  mutation CreateProduct($input: CreateProductInput!) {
+    createProduct(input: $input) {
+      success
+      message
+      product {
+        productId
+        name
+        price
+        category
+        pictures
+        quantity
+      }
+    }
+  }
+`;

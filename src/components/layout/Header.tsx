@@ -49,6 +49,15 @@ const Header: React.FC = () => {
                     Delivery
                   </Link>
                 )}
+                {/* Show Admin Products link only for admin users */}
+                {user?.groups?.includes('admin') && (
+                  <Link to="/admin/products" className="flex items-center gap-1 text-gray-700 hover:text-primary-600 font-medium">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Admin
+                  </Link>
+                )}
               </>
             )}
           </div>
