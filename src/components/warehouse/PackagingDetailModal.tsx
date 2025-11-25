@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation } from '@apollo/client';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useApolloClient } from '@apollo/client';
 import {
   GET_PACKAGING_REQUEST_V2,
   START_PACKAGING,
   UPDATE_PACKAGING_PRODUCT,
   COMPLETE_PACKAGING,
   GET_NEW_PACKAGING_REQUEST_IDS,
+  GET_PRODUCT,
 } from '../../graphql/queries';
 import Button from '../ui/Button';
 import type { PackagingRequest, UpdatePackagingProductInput, Response } from '../../types/graphql';
@@ -16,8 +17,12 @@ interface PackagingDetailModalProps {
 }
 
 const PackagingDetailModal: React.FC<PackagingDetailModalProps> = ({ orderId, onClose }) => {
+  const client = useApolloClient();
+  
   // Track which products are checked (packed), not quantities
   const [checkedProducts, setCheckedProducts] = useState<Set<string>>(new Set());
+  // Store product names fetched from GET_PRODUCT queries
+  const [productNames, setProductNames] = useState<Map<string, string>>(new Map());
 
   const { data: packagingData, loading: packagingLoading, error, refetch } = useQuery<{ getPackagingRequest: PackagingRequest }>(
     GET_PACKAGING_REQUEST_V2,
@@ -32,7 +37,6 @@ const PackagingDetailModal: React.FC<PackagingDetailModalProps> = ({ orderId, on
           products: data?.getPackagingRequest?.products
         });
         // Initialize with no products checked
-        // Filter out __metadata record - it's not a real product
         setCheckedProducts(new Set());
         console.log('[PackagingDetailModal] Initialized with no checked products');
       },
@@ -46,6 +50,48 @@ const PackagingDetailModal: React.FC<PackagingDetailModalProps> = ({ orderId, on
       },
     }
   );
+
+  // Fetch product names when packaging data is loaded
+  useEffect(() => {
+    console.log('[PackagingDetailModal] useEffect triggered, packagingData:', packagingData);
+    
+    const fetchProductNames = async () => {
+      if (!packagingData?.getPackagingRequest?.products) {
+        console.log('[PackagingDetailModal] No products data yet, skipping fetch');
+        return;
+      }
+      
+      const products = packagingData.getPackagingRequest.products.filter(p => p.productId !== '__metadata' && p.productId !== 'META');
+      console.log('[PackagingDetailModal] Fetching names for products:', products.map(p => p.productId));
+      
+      const names = new Map<string, string>();
+      
+      for (const product of products) {
+        try {
+          console.log(`[PackagingDetailModal] Fetching name for product: ${product.productId}`);
+          const result = await client.query({
+            query: GET_PRODUCT,
+            variables: { productId: product.productId },
+            fetchPolicy: 'network-only'
+          });
+          
+          console.log(`[PackagingDetailModal] Result for ${product.productId}:`, result.data);
+          
+          if (result.data?.getProduct?.name) {
+            names.set(product.productId, result.data.getProduct.name);
+            console.log(`[PackagingDetailModal] Set name for ${product.productId}: ${result.data.getProduct.name}`);
+          }
+        } catch (error) {
+          console.error(`[PackagingDetailModal] Failed to fetch product name for ${product.productId}:`, error);
+        }
+      }
+      
+      console.log('[PackagingDetailModal] All product names loaded:', Object.fromEntries(names));
+      setProductNames(names);
+    };
+    
+    fetchProductNames();
+  }, [packagingData, client]);
 
   const [startPackaging, { loading: startLoading }] = useMutation<{ startPackaging: Response }>(
     START_PACKAGING,
@@ -387,14 +433,14 @@ const PackagingDetailModal: React.FC<PackagingDetailModalProps> = ({ orderId, on
     );
   }
 
-  // Map packaging products to include checked state
+  // Map packaging products to include checked state and product names
   const productsToPack = packagingProducts.map(packagingProduct => {
     const isChecked = checkedProducts.has(packagingProduct.productId);
     return {
       productId: packagingProduct.productId,
       quantity: packagingProduct.quantity, // This is the target quantity from order
       checked: isChecked,
-      name: packagingProduct.productId // Use productId as name since we don't have order data
+      name: productNames.get(packagingProduct.productId) || 'Loading...'
     };
   });
 
@@ -502,8 +548,10 @@ const PackagingDetailModal: React.FC<PackagingDetailModalProps> = ({ orderId, on
                     
                     {/* Product Info */}
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 mb-1">Product ID</p>
-                      <p className="text-sm font-mono text-gray-600">{product.productId}</p>
+                      <p className="font-medium text-gray-900 mb-1">
+                        {productNames.get(product.productId) || 'Loading...'}
+                      </p>
+                      <p className="text-xs font-mono text-gray-500">{product.productId}</p>
                     </div>
                     
                     {/* Quantity Badge */}
